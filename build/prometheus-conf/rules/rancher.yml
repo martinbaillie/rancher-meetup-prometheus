@@ -1,0 +1,29 @@
+#######################
+# RANCHER LEVEL RULES #
+#######################
+ALERT RancherContainerInstanceUnhealthy
+  IF rancher_service_health_status{health_state != "healthy"} == 1
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Rancher container instance {{ $labels.name }} unhealthy",
+    description = "Rancher container instance {{ $labels.instance }} of {{ $labels.name }} in stack {{ $labels.stack_name }} has not been in a healthy state for more than 15 minutes. Its current state is '{{ $labels.health_state }}'.",
+  }
+
+ALERT RancherHostInactive
+  IF rancher_host_state{state =~ "^activ."} == 0
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Rancher host is inactive in {{ $labels.env }}: {{ $labels.name }}",
+    description = "The {{ $labels.name }} host in {{ $labels.env }} has not been in an active state for more than 15 minutes. Its current state is '{{ $labels.state }}'",
+  }
+
+ALERT RancherContainerUnreachable
+  IF container_state == 0
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Container  {{ $labels.container_name }} is currently unreachable",
+    description = "Container {{ $labels.container_name }} is currently unreachable from {{ $labels.instance }} in ENV {{ $labels.env }}.",
+  }

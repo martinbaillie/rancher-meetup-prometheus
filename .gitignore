@@ -1,0 +1,5 @@
+infrastructure/*.tfstate
+infrastructure/*.tfstate*
+infrastructure/secrets
+deploy/rancher.env
+**/.DS_Store

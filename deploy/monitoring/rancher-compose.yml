@@ -1,0 +1,132 @@
+version: '2'
+services:
+  prometheus:
+    scale: 1
+    metadata:
+      scrape_configs:
+        default_labels:
+          env: DEMO
+
+      alert_rules: |
+        ALERT PrometheusScrapeTargetDown
+        IF up == 0
+        FOR 15m
+        LABELS { severity = "page" }
+        ANNOTATIONS {
+          summary = "Prometheus scrape target {{ $$labels.job }}/{{ $$labels.instance }} down",
+          description = "The Prometheus scrape target instance '{{ $$labels.instance }}' of job '{{ $$labels.job }}' has been down for more than 15 minutes.",
+          }
+
+  # TODO: make alertmanager config discoverable in individual services
+  prometheus-alertmanager:
+    scale: 1
+    metadata:
+      config: |
+        global:
+          # The smarthost and SMTP sender used for mail notifications.
+          smtp_smarthost: your.smtp.server.com
+          smtp_from: alertmanager@ranchermeetup.baillie.cloud
+          smtp_require_tls: false
+
+          # Slack webhook
+          slack_api_url: 'https://hooks.slack.com/services/SOMETHING/SOMETHING/SOMETHING'
+
+        templates:
+          - '/etc/alertmanager/templates/*.tmpl'
+
+        # The root route on which each incoming alert enters.
+        route:
+          # The root route must not have any matchers as it is the entry point for
+          # all alerts. It needs to have a receiver configured so alerts that do not
+          # match any of the sub-routes are sent to someone.
+          receiver: 'default-page'
+
+          # The labels by which incoming alerts are grouped together. For example,
+          # multiple alerts coming in for cluster=A and alertname=LatencyHigh would
+          # be batched into a single group.
+          group_by: ['alertname', 'cluster']
+
+          # When a new group of alerts is created by an incoming alert, wait at
+          # least 'group_wait' to send the initial notification.
+          # This way ensures that you get multiple alerts for the same group that start
+          # firing shortly after another are batched together on the first
+          # notification.
+          group_wait: 1m
+
+          # When the first notification was sent, wait 'group_interval' to send a batch
+          # of new alerts that started firing for that group.
+          group_interval: 5m
+
+          # If an alert has successfully been sent, wait 'repeat_interval' to
+          # resend them.
+          repeat_interval: 3h
+
+          # All the above attributes are inherited by all child routes and can
+          # overwritten on each.
+          routes:
+            - match:
+                service: api-A
+              receiver: devops-team-responsible-for-api-A
+            - match:
+                service: api-B
+              receiver: devops-team-responsible-for-api-B
+            - match:
+                service: api-C
+              receiver: devops-team-responsible-for-api-C
+
+        # Inhibition rules allow to mute a set of alerts given that another alert is
+        # firing.
+        # We use this to mute any warning-level notifications if the same alert is
+        # already critical.
+        inhibit_rules:
+        - source_match:
+            severity: 'critical'
+          target_match:
+            severity: 'warning'
+          # Apply inhibition if the alertname is the same.
+          equal: ['alertname']
+
+        receivers:
+        - name: 'default-page'
+          email_configs:
+            - to: 'martin.t.baillie@gmail.com'
+              html: '{{ template "email.demo.html" . }}'
+              send_resolved: true
+          slack_configs:
+            - channel: '#alerts-no-one-else-cares-about'
+              text: '{{ template "slack.demo.text" . }}'
+              title_link: '{{ template "slack.demo.titlelink" . }}'
+              icon_emoji: '{{ template "slack.demo.iconemoji" . }}'
+              username: '{{ template "slack.demo.username" . }}'
+              send_resolved: true
+
+        - name: 'devops-team-responsible-for-api-A'
+          email_configs:
+            - to: 'devops-team-A@evilcorp.com.au'
+              send_resolved: true
+            - to: 'devops-team-A-stakeholders@evilcorp.com.au'
+              send_resolved: true
+
+        - name: 'devops-team-responsible-for-api-B'
+          email_configs:
+            - to: 'devops-team-B-stakeholders@evilcorp.com.au'
+              send_resolved: true
+          slack_configs:
+            - api_url: 'https://hooks.slack.com/services/TEAM/B/HOOK'
+              channel: '#devops-team-b'
+              title_link: '{{ template "slack.demo.titlelink" . }}'
+              icon_emoji: '{{ template "slack.demo.iconemoji" . }}'
+              username: '{{ template "slack.demo.username" . }}'
+              send_resolved: true      
+
+        - name: 'devops-team-responsible-for-api-C'
+          pagerduty_configs:
+            - service_key: asdasdsadsasdasd
+          hipchat_configs:
+            - api_url: https://api.hipchat.com
+              message: >
+                [{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }}]
+                {{ .CommonAnnotations.description }}
+              send_resolved: true
+              room_id: '123456'
+              auth_token: abcdefABCDEF123456789

@@ -1,0 +1,10 @@
+[template]
+src = "prometheus.yml.tmpl"
+dest = "/etc/prometheus-conf/prometheus.yml"
+keys = [
+  "/hosts",
+  "/services",
+  "/self/container/primary_ip",
+  "/self/service/metadata",
+]
+reload_cmd = "curl -s -XPOST prometheus:9090/-/reload"

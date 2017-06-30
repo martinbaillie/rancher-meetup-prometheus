@@ -1,0 +1,189 @@
+version: '2'
+volumes:
+  grafana:
+  prometheus:
+  alertmanager:
+
+services:
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,vonage-status-panel,neocat-cal-heatmap-panel,grafana-worldmap-panel
+      GF_DASHBOARDS_JSON_ENABLED: true
+      GF_DASHBOARDS_JSON_PATH: /etc/grafana-conf/dashboards
+      GF_ALERTING_ENABLED: false
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_NAME: DEMO
+      #GF_AUTH_LDAP_ENABLED: true
+      #GF_AUTH_LDAP_CONFIG_FILE: /etc/grafana-conf/ldap.toml
+    volumes:
+      - grafana:/var/lib/grafana
+    volumes_from:
+      - grafana-conf
+    depends_on:
+      - grafana-conf
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.sidekicks: grafana-conf
+      traefik.port: 3000
+      traefik.frontend.rule: "Host: grafana.${EXTERNAL_FQDN}"
+
+  grafana-conf:
+    image: martinbaillie/grafana-conf
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    labels:
+      io.rancher.container.pull_image: always
+      confd.container: true
+
+  prometheus:
+    image:  prom/prometheus
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    network_mode: "container:prometheus-conf"
+    command:
+      - -web.external-url=http://prometheus.${EXTERNAL_FQDN}
+      - -alertmanager.url=http://prometheus-alertmanager:9093
+      - -config.file=/etc/prometheus-conf/prometheus.yml
+    volumes:
+      - prometheus:/prometheus
+    volumes_from:
+      - prometheus-conf
+    depends_on:
+      - prometheus-conf
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.sidekicks: prometheus-conf
+
+  prometheus-conf:
+    image: martinbaillie/prometheus-conf
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    labels:
+      confd.container: true
+      traefik.port: 9090
+      traefik.frontend.rule: "Host: prometheus.${EXTERNAL_FQDN}"
+      io.rancher.container.pull_image: always
+
+  prometheus-alertmanager:
+    image: prom/alertmanager
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    command:
+      - -web.external-url=http://alerts.${EXTERNAL_FQDN}
+      - -storage.path=/alertmanager
+      - -config.file=/etc/alertmanager/config.yml
+    volumes:
+      - alertmanager:/alertmanager
+    volumes_from:
+      - prometheus-alertmanager-conf
+    depends_on:
+      - prometheus-alertmanager-conf
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.sidekicks: prometheus-alertmanager-conf
+      traefik.port: 9093
+      traefik.frontend.rule: "Host: alerts.${EXTERNAL_FQDN}"
+
+  prometheus-alertmanager-conf:
+    image: martinbaillie/prometheus-alertmanager-conf
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    labels:
+      confd.container: true
+      io.rancher.container.pull_image: always
+
+  # NOTE: running as docker container for demo purposes
+  prometheus-node-exporter:
+    image: prom/node-exporter
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    command:
+      - -collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($$|/)"
+      - -collector.sysfs=/host/sys
+      - -collector.procfs=/host/proc
+    network_mode: "host"
+    ports:
+      - 9100
+    volumes:
+      - /:/rootfs:ro
+      - /sys:/host/sys:ro
+      - /proc:/host/proc:ro
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: true
+
+  # NOTE: running as docker container for demo purposes
+  prometheus-cadvisor-exporter:
+    image: martinbaillie/cadvisor
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    command:
+      - -logtostderr
+      - --port=9200
+      - --housekeeping_interval=5s
+    network_mode: "host"
+    ports:
+      - 9200
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/log/:/var/log:ro
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: true
+
+  prometheus-rancher-exporter:
+    image: infinityworks/prometheus-rancher-exporter
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: warn
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.container.create_agent: true
+      io.rancher.container.agent.role: environment
+      prometheus.monitor: true
+      prometheus.monitor.port: 9173
+
+  prometheus-aggregation-gateway:
+    image: martinbaillie/prom-aggregation-gateway
+    restart: unless-stopped
+    command:
+      - -listen=:8080
+      - -cors=*
+    environment:
+      TZ: ${TZ}
+    labels:
+      io.rancher.container.pull_image: always
+      prometheus.monitor: true
+      traefik.port: 8080
+      traefik.frontend.rule: "Host: aggregation-gateway.${EXTERNAL_FQDN}"
+
+  prometheus-container-monitor:
+    image: gmehta3/prometheus-container-monitor
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MODE: tcp
+      ENV: DEMO
+      PORT: 8080
+    labels:
+      io.rancher.scheduler.global: true
+      io.rancher.container.pull_image: always
+      io.rancher.container.create_agent: true
+      io.rancher.container.agent.role:  environment
+      prometheus.monitor: true

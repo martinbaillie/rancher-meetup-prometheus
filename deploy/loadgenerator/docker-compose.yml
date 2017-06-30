@@ -1,0 +1,15 @@
+version: '2'
+services:
+  ab:
+    image: martinbaillie/apache-bench
+
+    entrypoint: sh
+    command: 
+    - -c
+    # Smash both entry points equally using GNU parallel
+    - '(echo "rancher-meetup-1.ranchermeetup.baillie.cloud/v1/textsay"; echo "rancher-meetup-2.ranchermeetup.baillie.cloud/v1/textsay") | parallel -j2 "ab -s 60 -k -r -l -t 720 -c 1000 -H ''Host: api.ranchermeetup.baillie.cloud'' {}"'
+
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.container.start_once: true
+      io.rancher.scheduler.global: true

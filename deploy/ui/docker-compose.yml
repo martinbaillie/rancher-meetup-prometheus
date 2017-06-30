@@ -1,0 +1,17 @@
+version: '2'
+services:
+  rancher-cowsay-goproverb-ui:
+    image: martinbaillie/rancher-cowsay-goproverb-ui
+
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+
+    labels:
+      io.rancher.container.pull_image: always
+
+      prometheus.monitor: true
+      prometheus.monitor.port: 9180
+
+      traefik.port: 80
+      traefik.frontend.rule: "Host: www.${EXTERNAL_FQDN}"

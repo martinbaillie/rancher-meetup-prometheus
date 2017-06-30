@@ -1,0 +1,48 @@
+version: '2'
+services:
+  traefik:
+    #image: martinbaillie/traefik
+    image: containous/traefik:experimental
+
+    restart: unless-stopped
+
+    environment:
+      TZ: ${TZ}
+
+    ports:
+      - 80:80
+      - 443:443
+
+    command:
+      - --web
+      - --web.metrics
+      - --web.metrics.prometheus
+
+      - --rancher
+      - --rancher.metadata
+
+      - --accesslog
+        
+      - --entryPoints=Name:http Address::80
+      #- --entryPoints=Name:http Address::80 Redirect.EntryPoint:https
+      - --entryPoints=Name:https Address::443 TLS
+      - --defaultentrypoints=http,https
+
+      - --acme
+      - --acme.email=martin.t.baillie@gmail.com
+      - --acme.storage=/mnt/acme.json
+      - --acme.entrypoint=https
+      - --acme.ondemand=true
+      #- --acme.caserver=https://acme-staging.api.letsencrypt.org/directory
+      - --acme.onhostrule=true
+    volumes:
+      - /acme.json:/mnt/acme.json
+
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: true
+
+      prometheus.monitor: true
+
+      traefik.port: 8080
+      traefik.frontend.rule: "Host: traefik.${EXTERNAL_FQDN}"

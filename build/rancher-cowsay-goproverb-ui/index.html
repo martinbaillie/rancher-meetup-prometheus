@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Rancher Cowsay Goproverb</title>
+    <style type="text/css">
+      .cow-thought {
+        position:relative;
+        width:270px;
+        padding:40px 30px;
+        margin:1em auto 20px;
+        text-align:center;
+        font-style: italic;
+        color:#fff;
+        background:#0075a8;
+        -webkit-border-top-left-radius:260px 140px;
+        -webkit-border-top-right-radius:260px 140px;
+        -webkit-border-bottom-right-radius:260px 140px;
+        -webkit-border-bottom-left-radius:260px 140px;
+        -moz-border-radius:260px / 140px;
+        border-radius:260px / 140px;
+      }
+      .cow-thought p {font-size:1.25em;}
+      .cow-thought:before {
+        content:"";
+        position:absolute;
+        bottom:-25px;
+        left:50px;
+        width:30px;
+        height:30px;
+        background:#0075a8;
+        -webkit-border-radius:30px;
+        -moz-border-radius:30px;
+        border-radius:30px;
+      }
+      .cow-thought:after {
+        content:"";
+        position:absolute;
+        bottom:-35px;
+        left:30px;
+        width:15px;
+        height:15px;
+        background:#0075a8;
+        -webkit-border-radius:15px;
+        -moz-border-radius:15px;
+        border-radius:15px;
+      }
+      .button {
+        background-color: #2c3e50;
+        border: none;
+        color: white;
+        padding: 15px 32px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 50%;
+      }
+      .button:focus {outline:0;}
+      .button:hover {background-color: #0075a8;}
+      .button:active {
+        background-color: #3e8e41;
+        box-shadow: 0 5px #666;
+        transform: translateY(4px);
+      }
+    </style>
+    <script src="prom.js"></script>
+    <script>
+      const registry = promjs.default();
+      const counter = registry.create('counter', 'meetup_client_side_counter', 'A counter in the browser');
+      const gauge = registry.create('gauge', 'meetup_client_side_gauge', 'A gauge in the browser');
+      const histogram = registry.create('histogram', 'meetup_client_side_proverb_latency_milliseconds',
+        'The client side response time of the proverb call in milliseconds', [500, 1000, 1500, 2500, 3000]);
+
+      function proverb() {
+        var cowthought = document.getElementById('cow-thought');
+        var start = new Date().getTime();
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '//api.ranchermeetup.baillie.cloud/v1/textsay');
+        xhr.onreadystatechange = function() {
+          if(xhr.readyState == 4) { 
+            histogram.observe((new Date().getTime() - start), { path: '/v1/textsay', status: xhr.status})
+            if (xhr.status == 200) {
+              var res = JSON.parse(xhr.responseText);
+              cowthought.innerText = "\""+res.say+"\"";
+            }
+          }
+        }
+        xhr.send(null);
+      }
+      window.onload=proverb
+
+      function sendMetrics() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '//aggregation-gateway.ranchermeetup.baillie.cloud/api/ui/metrics');
+        xhr.setRequestHeader('Content-Type', 'text/plain');
+        xhr.onreadystatechange = function() {
+          if(xhr.readyState == 4) {
+            if (xhr.status == 200) {
+              console.log('sent:');
+              console.log(registry.metrics())
+            } else {
+              console.log('failed!');
+            }
+          }
+        }
+        xhr.send(registry.metrics());
+      }
+    </script>
+  </head>
+  <body>
+    <div>
+      <button id="proverb" class="button" onclick="proverb();sendMetrics()">new proverb</button>
+      <button id="sendMetrics" class="button" onclick="sendMetrics()">send metrics</button>
+      <button id="incCounter" class="button" onclick="counter.inc();console.log('counter: '+counter.get().value)">increment counter</button>
+      <button id="incGauge" class="button" onclick="gauge.inc();console.log('gauge: '+gauge.get().value)">increment gauge</button>
+      <button id="decGauge" class="button" onclick="gauge.dec();console.log('gauge: '+gauge.get().value)">decrement gauge</button>
+    </div>
+    <blockquote class="cow-thought"><p id="cow-thought"></p></blockquote>
+    <img src="cow.png"/> 
+  </body>
+</html>

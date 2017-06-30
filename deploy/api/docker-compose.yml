@@ -1,0 +1,27 @@
+version: '2'
+services:
+  rancher-cowsay-goproverb-api:
+    image: martinbaillie/rancher-cowsay-goproverb-api
+    
+    restart: unless-stopped
+
+    environment:
+      TZ: ${TZ}
+
+    command:
+      - -debug
+
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+
+      prometheus.monitor: true
+      prometheus.monitor.port: 8081
+
+      traefik.port: 8080
+      traefik.frontend.rule: "Host: api.${EXTERNAL_FQDN}" 
+
+      #traefik.cowsay.port: 8080
+      #traefik.cowsay.frontend.rule: "PathPrefix:/v1/cowsay"
+      #traefik.textsay.port: 8080
+      #traefik.textsay.frontend.rule: "PathPrefix:/v1/textsay"

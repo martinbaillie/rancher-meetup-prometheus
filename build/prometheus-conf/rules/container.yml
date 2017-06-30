@@ -1,0 +1,11 @@
+ALERT ContainerCPUUsageSpike
+  IF rate(container_cpu_user_seconds_total{image!="",container_label_io_rancher_container_system=""}[1m]) * 100 > 70
+  FOR 1m
+  LABELS {
+    severity="critical",
+    action="scale"
+  }
+  ANNOTATIONS {
+    summary = "[SCALE ALERT] Scaling {{ $labels.container_label_io_rancher_container_name }}",
+    description = "CPU usage has been above 70% for {{ $labels.container_label_io_rancher_container_name }}. Scaling +1 in Rancher"
+  }

@@ -1,0 +1,5 @@
+[template]
+src = "set-defaults.sh.tmpl"
+dest = "/etc/grafana-conf/set-defaults.sh"
+keys = []
+reload_cmd = "sh /etc/grafana-conf/set-defaults.sh | tee /etc/grafana-conf/set-defaults.log"

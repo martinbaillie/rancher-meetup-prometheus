@@ -1,0 +1,52 @@
+####################
+# HOST LEVEL RULES #
+####################
+ALERT HostLowMemory
+  # If any host has < 10% memory free
+  IF (node_memory_MemAvailable / node_memory_MemTotal) * 100 < 5
+  FOR 5m
+  LABELS { severity="page" }
+  ANNOTATIONS {
+    summary = "Host {{ $labels.instance }} low memory",
+    description = "The memory on {{ $labels.instance }} has dropped below 5% free for more than 15 minutes. The current free memory is calculated at being: {{ humanize $value }}%",
+  }
+
+ALERT HostLowDiskSpace
+  # If any host has < 10% free on a filesystem we care about
+  IF ((sum without(mountpoint,ftype)(node_filesystem_avail{fstype=~"nfs|xfs|ext4"})) / (sum without(mountpoint,ftype)(node_filesystem_size{fstype=~"nfs|xfs|ext4"}))) * 100 < 10
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Host {{ $labels.instance }} low disk space",
+    description = "The '{{ $labels.device }}' ({{ $labels.fstype }}) on {{ $labels.instance }} has dropped below 10% free for more than 15 minutes. The current free space is calculated at being: {{ humanize $value }}%",
+  }
+
+ALERT HostHighCPU
+  # If any host has a CPU saturation (across all CPUs) > 90%
+  IF 100 - (avg by (instance) (irate(node_cpu{mode="idle"}[5m])) * 100) > 95
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Host {{ $labels.instance }} high CPU",
+    description = "{{ $labels.instance }} has been saturated above 95% for more than 15 minutes. The current calculated usage is: {{ humanize $value }}%",
+  }
+
+ALERT HostHighLoad
+  # If any host has a load average above the number of CPUs it has
+  IF node_load1 / on (instance) count(node_cpu{mode="idle"}) by (instance) > 1
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Host {{ $labels.instance }} high load",
+    description = "{{ $labels.instance }} has had a load average above its number of CPUs for more than 15 minutes.",
+  }
+
+ALERT HostDiskWillFillIn2Hours
+  # If any host has a filesystem with a predicted linear progression of filling in 2 hours
+  IF sum without(mountpoint) (predict_linear(node_filesystem_free{device=~"/dev/.*"}[30m], 2*3600)) < 0
+  FOR 5m
+  LABELS { severity = "page" }
+  ANNOTATIONS {
+    summary = "Host {{ $labels.instance }} disk will fill in 2 hours",
+    description = "{{ $labels.device }} on {{ $labels.instance }} is predicted to fill up within 2 hours.",
+  }

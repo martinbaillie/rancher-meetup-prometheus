@@ -1,0 +1,7 @@
+*:80
+prometheus :9180
+gzip
+cors
+root /srv
+log stdout
+errors stderr

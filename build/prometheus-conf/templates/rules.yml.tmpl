@@ -1,0 +1,3 @@
+{{ range $serviceName := lsdir "/services" }} {{ if exists (printf "/services/%s/metadata/alert_rules" $serviceName) }} {{ if not (exists (printf "/services/%s/labels/confd.container" $serviceName)) }}
+{{ getv (printf "/services/%s/metadata/alert_rules" $serviceName) }} {{ end }} {{ end }} {{ end }}
+

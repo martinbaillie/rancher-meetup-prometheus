@@ -1,0 +1,79 @@
+version: '2'
+services:
+  rancher-cowsay-goproverb-api:
+    scale: 2
+
+    upgrade_strategy:
+      start_first: true
+
+    health_check:
+      port: 8080
+      interval: 2000
+      initializing_timeout: 60000
+      unhealthy_threshold: 3
+      strategy: none
+      healthy_threshold: 2
+      response_timeout: 3000
+
+    metadata:
+      alert_rules: |
+        ALERT GoproverbPanicIndexResult
+          # Business metric example... we really hate Goproverb index 19 "Don't Panic"
+          # Alert if returned to a user more than 100 times in a minute
+          IF increase(rancher_cowsay_goproverb_api_request_count{index="18"}[1m]) > 100
+          FOR 1m
+          LABELS { severity = "page" }
+          ANNOTATIONS {
+            summary = "{{ $$labels.job }} ({{ $$labels.instance }}) panic index alert",
+            description = "The Goproverb Panic index (19) has been returned more than 100 times in a minute on instance {{ $$labels.instance }}"
+          }
+
+        ALERT GoproverbRequestsPerSecondAbove300
+          # If the requests per second has been above 300 across the Goproverb API cluster in the last minute
+          IF sum(rate(rancher_cowsay_goproverb_api_request_count[1m])) > 300
+          FOR 1m
+          LABELS { severity = "page" }
+          ANNOTATIONS {
+            summary = "Goproverb API cluster is above 300 requests per second",
+            description = "The Goproverb API cluster has been receiving over 300rps (currently: {{ $$value }}) for the last minute"
+          }
+
+        # Recording rules for fancy forecasting
+        instance:goproverb_rls_sum:rate1m = rate(rancher_cowsay_goproverb_api_request_latency_seconds_sum[1m])
+        instance:goproverb_rls_count:rate1m = rate(rancher_cowsay_goproverb_api_request_latency_seconds_sum[1m])
+        instance:goproverb_rls:mean1m = instance:goproverb_rls_sum:rate1m / instance:goproverb_rls_count:rate1m
+
+        job:goproverb_api_requests:rate1m = sum by(job) (rate(rancher_cowsay_goproverb_api_request_count[1m]))
+        job:goproverb_api_requests:holt_winters_rate5m = holt_winters(job:goproverb_api_requests:rate1m[5m], 0.2, 0.2)
+
+        ALERT GoproverbAbnormalInstanceLatency
+          # If a Goproverb instance is over two standard deviations above the mean
+          IF
+            ( instance:goproverb_rls:mean1m > on (job) group_left()
+              ( avg by (job) (instance:goproverb_rls:mean1m > 0) +
+                  on (job) 2 * stddev
+                  by (job) (instance:goproverb_rls:mean1m > 0)
+              )
+            )
+            >
+            # Avoid clustered latency problem by saying instance latency has to be 20% above the average
+            on (job) group_left() 1.2 * avg by (job) (instance:goproverb_rls:mean1m > 0)
+            # And each instance has been called more than 3 times in the last minute
+            and on (job) avg by (job) (instance:goproverb_rls_count:rate1m * 60) > 3
+          FOR 2m
+          LABELS { severity = "page" }
+          ANNOTATIONS {
+            summary = "Goproverb API latency outlier on instance {{ $$labels.instance }}",
+            description = "Requests to the Goproverb API instance {{ $$labels.instance }} has had a latency outside 2 standard deviations from the mean for more than 2 minutes"
+          }
+
+        ALERT GoproverbExceedingForecastRequestRate 
+          # If the request rate is outside the Holt-Winters forecast smoothed value for the last 5m
+          IF  abs(job:goproverb_api_requests:rate1m - job:goproverb_api_requests:holt_winters_rate5m) >
+              abs(0.6 * job:goproverb_api_requests:holt_winters_rate5m)
+          FOR 2m
+          LABELS { severity = "page" }
+          ANNOTATIONS {
+            summary = "The Goproverb request rate has been abnormally high for the last 2 minutes",
+            description = "The Goproverb request rate has been above its Holt-Winters exponentially smoothed forecast for the last 2 minutes",
+          }

@@ -1,0 +1,13 @@
+version: '2'
+services:
+  traefik:
+    upgrade_strategy:
+      start_first: true
+      health_check:
+        port: 8080
+        healthy_threshold: 2
+        unhealthy_threshold: 3
+        interval: 3000
+        response_timeout: 3000
+        request_line: HEAD /ping HTTP/1.0
+        strategy: recreate
